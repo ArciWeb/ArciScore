@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="sk" data-theme="dark">
 <head>
@@ -93,7 +94,7 @@
     <!-- KROK 1: VSTUP -->
     <div id="step-setup" class="setup-card">
         <h2>🚀 Nastavenie Novej Súťaže</h2>
-        <p style="color:var(--muted);">Zadaj kluby. Pokiaľ nemáš API kľúč, nevadí – aplikácia použije inteligentný offline systém!</p>
+        <p style="color:var(--muted);">Zadaj kluby. Uisti sa, že máš správne vložený Gemini API kľúč!</p>
         
         <div style="margin-bottom: 15px;">
             <label>Počet Klubov:</label>
@@ -103,12 +104,12 @@
         <div id="teamsInputArea" class="grid-2"></div>
 
         <button class="btn" style="margin-top:20px; width:100%; justify-content:center; font-size:16px;" onclick="fetchClubsData()">
-            🔍 Analyzovať & Načítať Kádre Klubov
+            🔍 Analyzovať & Načítať Reálne Kádre Cez AI
         </button>
 
         <div id="loadingArea" style="display:none; text-align:center; margin-top:20px;">
             <div class="loader"></div>
-            <p id="loadingStatus">Spracovávam informácie o kluboch...</p>
+            <p id="loadingStatus">Získavam reálne dáta klubov od Gemini AI...</p>
         </div>
     </div>
 
@@ -173,22 +174,15 @@
 <div class="modal" id="keyModal">
     <div class="modal-body">
         <h3>🔑 Nastavenie Google Gemini API Kľúča</h3>
-        <p style="color:var(--muted); font-size:13px;">Kľúč získaš zadarmo na <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);">aistudio.google.com</a>.</p>
-        <input type="password" id="apiKeyInput" placeholder="Vlož kľúč (AIzaSy...)">
+        <p style="color:var(--muted); font-size:13px;">Skopíruj kľúč z Google AI Studio (aistudio.google.com).</p>
+        <input type="password" id="apiKeyInput" placeholder="Vlož Gemini API kľúč">
         <button class="btn" style="width:100%; margin-top:15px; justify-content:center;" onclick="saveApiKey()">Uložiť Kľúč</button>
-        <button class="btn btn-secondary" style="width:100%; margin-top:5px; justify-content:center;" onclick="document.getElementById('keyModal').style.display='none'">Použiť bez kľúča (Offline Režim)</button>
     </div>
 </div>
 
-<!-- MODAL DETAIL ZÁPASU -->
-<div class="modal" id="matchModal">
-    <div class="modal-body" id="matchModalContent"></div>
-</div>
-
-<!-- MODAL DETAIL KLUKU -->
-<div class="modal" id="clubModal">
-    <div class="modal-body" id="clubModalContent"></div>
-</div>
+<!-- MODALS -->
+<div class="modal" id="matchModal"><div class="modal-body" id="matchModalContent"></div></div>
+<div class="modal" id="clubModal"><div class="modal-body" id="clubModalContent"></div></div>
 
 <script>
 let clubsData = [];
@@ -229,50 +223,58 @@ async function fetchClubsData() {
     const inputs = document.querySelectorAll(".club-input-name");
     const rawNames = Array.from(inputs).map(i => i.value.trim()).filter(n => n.length > 0);
 
+    if(!apiKey) {
+        alert("Prosím vlož najprv vpravo hore svoj Gemini API Kľúč!");
+        openKeyModal();
+        return;
+    }
+
     if(rawNames.length < 2) { alert("Zadaj aspoň 2 kluby!"); return; }
 
     document.getElementById("loadingArea").style.display = "block";
 
-    // Ak je k dispozícii Gemini API kľúč, zavoláme Google API
-    if(apiKey && apiKey.length > 10) {
-        try {
-            const promptText = `Vráť IBA validný JSON pole objektov pre kluby ${JSON.stringify(rawNames)}. Žiadny markdown. 
-            Štruktúra: [{"name":"Názov","budget":"XX mil. €","stadium":"Štadión","capacity":30000,"rating":80,"homeAdvantage":85,"squad":["Hráč 1","Hráč 2","Hráč 3","Hráč 4","Hráč 5","Hráč 6"]}]`;
+    const promptText = `Si futbalová databáza. Vráť IBA čistý JSON bez prídavného textu alebo markdown značiek pre futbalové kluby: ${JSON.stringify(rawNames)}.
+ pre každý klub uveď REÁLNE MENÁ súčasných hráčov (aspoň 8 hlavných hviezd/hráčov), reálny štadión, reálnu kapacitu a odhadovaný rozpočet.
+Presný tvar JSON:
+[
+  {
+    "name": "Názov Klubu",
+    "budget": "100 mil. €",
+    "stadium": "Názov reálneho štadióna",
+    "capacity": 35000,
+    "rating": 82,
+    "homeAdvantage": 85,
+    "squad": ["Reálne Meno Hráča 1", "Reálne Meno Hráča 2", "Reálne Meno Hráča 3", "Reálne Meno Hráča 4", "Reálne Meno Hráča 5", "Reálne Meno Hráča 6", "Reálne Meno Hráča 7", "Reálne Meno Hráča 8"]
+  }
+]`;
 
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: promptText }] }]
-                })
-            });
+    try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: promptText }] }]
+            })
+        });
 
-            const data = await res.json();
-            let rawText = data.candidates[0].content.parts[0].text;
-            rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-            clubsData = JSON.parse(rawText);
-
+        const data = await res.json();
+        
+        if (data.error) {
+            alert("Chyba API: " + data.error.message);
             document.getElementById("loadingArea").style.display = "none";
-            renderClubsReview();
             return;
-        } catch(e) {
-            console.warn("AI API zlyhalo, prepínam na offline režim...", e);
         }
+
+        let rawText = data.candidates[0].content.parts[0].text;
+        rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+        clubsData = JSON.parse(rawText);
+
+        document.getElementById("loadingArea").style.display = "none";
+        renderClubsReview();
+    } catch(e) {
+        document.getElementById("loadingArea").style.display = "none";
+        alert("Chyba pri odpovedi AI: " + e.message + "\nSkontroluj správnosť kľúča v nastaveniach.");
     }
-
-    // OFFLINE FALLBACK (Generátor pre prípad, že API zlyhá alebo chýba kľúč)
-    clubsData = rawNames.map(name => ({
-        name: name,
-        budget: `${Math.floor(Math.random()*150 + 20)} mil. €`,
-        stadium: `Štadión ${name}`,
-        capacity: Math.floor(Math.random()*30000 + 15000),
-        rating: Math.floor(Math.random()*20 + 70),
-        homeAdvantage: Math.floor(Math.random()*20 + 75),
-        squad: Array.from({length: 8}, (_, k) => `${name} Útočník/Hráč #${k+1}`)
-    }));
-
-    document.getElementById("loadingArea").style.display = "none";
-    renderClubsReview();
 }
 
 function renderClubsReview() {
