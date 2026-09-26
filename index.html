@@ -138,7 +138,7 @@
 
         <!-- REŽIM: RUČNÝ -->
         <div id="manualModeArea" style="display:none;">
-            <p style="color:var(--muted);">Vipíš názvy jednotlivých klubov:</p>
+            <p style="color:var(--muted);">Vypíš názvy jednotlivých klubov:</p>
             <div id="teamsInputArea" class="grid-2"></div>
         </div>
 
@@ -384,14 +384,15 @@ Vráť IBA čistý JSON bez prídavného textu v presnom tvare:
     document.getElementById("loadingArea").style.display = "block";
     const statusText = document.getElementById("loadingStatus");
 
-    // Zoznam dostupných modelov na vyskúšanie (Fallback stratégia)
+    // Aktualizované podpora platných modelov Google Gemini API
     const modelsToTry = [
-        "gemini-1.5-flash",
-        "gemini-1.5-pro"
+        "gemini-2.5-flash",
+        "gemini-2.0-flash"
     ];
 
     let maxRetries = 3;
     let success = false;
+    let lastError = "";
 
     for (let modelName of modelsToTry) {
         if (success) break;
@@ -402,9 +403,8 @@ Vráť IBA čistý JSON bez prídavného textu v presnom tvare:
             try {
                 statusText.innerText = `Komunikujem s AI (${modelName})... Pokus ${attempt}/${maxRetries}`;
                 
-                // Ak ide o druhý/tretí pokus, počkáme (Exponential Backoff)
                 if (attempt > 1) {
-                    await new Promise(res => setTimeout(res, attempt * 2500));
+                    await new Promise(res => setTimeout(res, attempt * 2000));
                 }
 
                 const res = await fetch(url, {
@@ -421,10 +421,11 @@ Vráť IBA čistý JSON bez prídavného textu v presnom tvare:
                 const data = await res.json();
 
                 if (data.error) {
-                    // Preťaženie / Limity -> skúsiť ďalší pokus v cykle
-                    if (data.error.code === 429 || data.error.code === 503 || (data.error.message && data.error.message.includes("overloaded"))) {
-                        console.warn(`Model ${modelName} preťažený, skúšam znova...`);
-                        continue;
+                    lastError = data.error.message;
+                    // Ak model neexistuje alebo je preťažený, prejsť na ďalší pokus/model
+                    if (data.error.code === 404 || data.error.code === 429 || data.error.code === 503) {
+                        console.warn(`Model ${modelName} zlyhal (${data.error.code}), skúšam ďalší krok...`);
+                        break; // Preskočí do cyklu pre ďalší model
                     }
                     throw new Error(data.error.message);
                 }
@@ -436,16 +437,18 @@ Vráť IBA čistý JSON bez prídavného textu v presnom tvare:
                 success = true;
                 document.getElementById("loadingArea").style.display = "none";
                 renderClubsReview();
-                break; // úspešne dokončené
+                break;
 
             } catch(e) {
-                console.error(`Chyba na modeli ${modelName}:`, e);
-                if (attempt === maxRetries && modelName === modelsToTry[modelsToTry.length - 1]) {
-                    document.getElementById("loadingArea").style.display = "none";
-                    alert("Chyba pri odpovedi AI: " + e.message + "\nSkús to znova o malú chvíľu.");
-                }
+                console.error(`Chyba pri modeli ${modelName}:`, e);
+                lastError = e.message;
             }
         }
+    }
+
+    if (!success) {
+        document.getElementById("loadingArea").style.display = "none";
+        alert("Chyba pri odpovedi AI: " + lastError + "\nSkontroluj správnosť API kľúča alebo to skús znova.");
     }
 }
 
