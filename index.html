@@ -384,10 +384,10 @@ Vráť IBA čistý JSON bez prídavného textu v presnom tvare:
     document.getElementById("loadingArea").style.display = "block";
     const statusText = document.getElementById("loadingStatus");
 
-    // Platné oficiálne modely odporúčané API rozhraním Google Gemini
+    // Aktualizované podstatné mená modelov podporované priamo Gemini API rozhraním
     const modelsToTry = [
-        "gemini-2.5-flash",
-        "gemini-2.5-pro"
+        "gemini-3.1-pro-preview",
+        "gemini-flash"
     ];
 
     let maxRetries = 2;
@@ -423,7 +423,7 @@ Vráť IBA čistý JSON bez prídavného textu v presnom tvare:
                 if (data.error) {
                     lastError = data.error.message;
                     console.warn(`Model ${modelName} zlyhal: ${data.error.message}`);
-                    break; // Ak zlyhal model, prejsť na nasledujúci zo zoznamu
+                    break;
                 }
 
                 let rawText = data.candidates[0].content.parts[0].text;
