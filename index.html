@@ -102,7 +102,7 @@
         </div>
     </div>
 
-    <!-- KROK 1A: PRVOTNÝ VÝBER (POČET TÍMOV & SPÔSOB) -->
+    <!-- KROK 1A: PRVOTNÝ VÝBER -->
     <div id="step-setup-initial" class="setup-card">
         <h2>🚀 Nastavenie Novej Súťaže</h2>
         <p style="color:var(--muted);">Zvoľ celkový počet tímov v lige a spôsob ich pridania.</p>
@@ -129,7 +129,7 @@
         </button>
     </div>
 
-    <!-- KROK 1B: DETAILNÉ ZADANIE (RUČNÉ ALEBO LIGY) -->
+    <!-- KROK 1B: DETAILNÉ ZADANIE -->
     <div id="step-setup-details" class="setup-card" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <h2 id="detailsTitle">Dopísanie Klubov</h2>
@@ -144,7 +144,7 @@
 
         <!-- REŽIM: AUTOMATICKÝ Z LÍG -->
         <div id="autoModeArea" style="display:none;">
-            <p style="color:var(--muted);">Zadaj ligy a počet klubov, ktoré z nich má AI automaticky vybrať (najlepšie tímy podľa tabuľky a rekonštrukcie kádra):</p>
+            <p style="color:var(--muted);">Zadaj ligy a počet klubov, ktoré z nich má AI automaticky vybrať:</p>
             <div id="leaguesContainer"></div>
             <button class="btn btn-secondary" style="margin-top:10px;" onclick="addLeagueRow()">➕ Pridať ďalšiu ligu</button>
         </div>
@@ -297,7 +297,6 @@ function renderManualInputs(count) {
 function renderLeagueInputs(totalCount) {
     const container = document.getElementById("leaguesContainer");
     container.innerHTML = "";
-    // Prednastavený prvý riadok
     addLeagueRow("Česká liga", totalCount);
 }
 
@@ -385,54 +384,66 @@ Vráť IBA čistý JSON bez prídavného textu v presnom tvare:
     document.getElementById("loadingArea").style.display = "block";
     const statusText = document.getElementById("loadingStatus");
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // Zoznam dostupných modelov na vyskúšanie (Fallback stratégia)
+    const modelsToTry = [
+        "gemini-1.5-flash",
+        "gemini-1.5-pro"
+    ];
 
     let maxRetries = 3;
-    let attempt = 0;
     let success = false;
 
-    while (attempt <= maxRetries && !success) {
-        try {
-            if (attempt > 0) {
-                statusText.innerText = `Server preťažený. Skúšam znova... (Pokus ${attempt}/${maxRetries})`;
-                await new Promise(res => setTimeout(res, attempt * 3000));
-            } else {
-                statusText.innerText = "Vyhľadávam dáta klubov a kádrov cez Gemini AI...";
-            }
+    for (let modelName of modelsToTry) {
+        if (success) break;
 
-            const res = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: promptText }] }]
-                })
-            });
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
-            const data = await res.json();
-
-            if (data.error) {
-                if (data.error.code === 429 || (data.error.message && data.error.message.includes("high demand"))) {
-                    attempt++;
-                    continue;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                statusText.innerText = `Komunikujem s AI (${modelName})... Pokus ${attempt}/${maxRetries}`;
+                
+                // Ak ide o druhý/tretí pokus, počkáme (Exponential Backoff)
+                if (attempt > 1) {
+                    await new Promise(res => setTimeout(res, attempt * 2500));
                 }
-                alert("Chyba API: " + data.error.message);
+
+                const res = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptText }] }],
+                        generationConfig: {
+                            response_mime_type: "application/json"
+                        }
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    // Preťaženie / Limity -> skúsiť ďalší pokus v cykle
+                    if (data.error.code === 429 || data.error.code === 503 || (data.error.message && data.error.message.includes("overloaded"))) {
+                        console.warn(`Model ${modelName} preťažený, skúšam znova...`);
+                        continue;
+                    }
+                    throw new Error(data.error.message);
+                }
+
+                let rawText = data.candidates[0].content.parts[0].text;
+                rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+                clubsData = JSON.parse(rawText);
+
+                success = true;
                 document.getElementById("loadingArea").style.display = "none";
-                return;
-            }
+                renderClubsReview();
+                break; // úspešne dokončené
 
-            let rawText = data.candidates[0].content.parts[0].text;
-            rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-            clubsData = JSON.parse(rawText);
-
-            success = true;
-            document.getElementById("loadingArea").style.display = "none";
-            renderClubsReview();
-
-        } catch(e) {
-            attempt++;
-            if (attempt > maxRetries) {
-                document.getElementById("loadingArea").style.display = "none";
-                alert("Chyba pri odpovedi AI: " + e.message + "\nSkús to znova o pár sekúnd.");
+            } catch(e) {
+                console.error(`Chyba na modeli ${modelName}:`, e);
+                if (attempt === maxRetries && modelName === modelsToTry[modelsToTry.length - 1]) {
+                    document.getElementById("loadingArea").style.display = "none";
+                    alert("Chyba pri odpovedi AI: " + e.message + "\nSkús to znova o malú chvíľu.");
+                }
             }
         }
     }
