@@ -197,7 +197,6 @@ let leagueActive = false;
 function init() {
     renderInputs();
     
-    // Blokovanie histórie prehliadača po spustení ligy
     window.addEventListener('popstate', function (event) {
         if (leagueActive) {
             history.pushState(null, document.title, location.href);
@@ -227,6 +226,7 @@ function renderInputs() {
     }
 }
 
+// Odolná funkcia pre odosielanie API s automatickým opakovaním (Retry Backoff)
 async function fetchClubsData() {
     const apiKey = localStorage.getItem("arciscore_gemini_key");
     const inputs = document.querySelectorAll(".club-input-name");
@@ -244,6 +244,7 @@ async function fetchClubsData() {
     }
 
     document.getElementById("loadingArea").style.display = "block";
+    const statusText = document.getElementById("loadingStatus");
 
     const promptText = `Si futbalová databáza. Vráť IBA čistý JSON bez prídavného textu pre futbalové kluby: ${JSON.stringify(rawNames)}.
 Pre každý klub uveď REÁLNE MENÁ súčasných hráčov (PRESNE 18 HRÁČOV v kádri - brankári, obrancovia, záložníci, útočníci), reálny štadión, reálnu kapacitu a odhadovaný rozpočet.
@@ -260,32 +261,58 @@ Presný tvar JSON:
   }
 ]`;
 
-    try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: promptText }] }]
-            })
-        });
+    // Použitie aktuálneho a stabilného modelu 2.5-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-        const data = await res.json();
-        
-        if (data.error) {
-            alert("Chyba API: " + data.error.message);
+    let maxRetries = 3;
+    let attempt = 0;
+    let success = false;
+
+    while (attempt <= maxRetries && !success) {
+        try {
+            if (attempt > 0) {
+                statusText.innerText = `Server preťažený. Skúšam znova... (Pokus ${attempt}/${maxRetries})`;
+                await new Promise(res => setTimeout(res, attempt * 3000)); // Čakanie 3s, 6s...
+            } else {
+                statusText.innerText = "Získavam reálne dáta klubov od Gemini AI...";
+            }
+
+            const res = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: promptText }] }]
+                })
+            });
+
+            const data = await res.json();
+
+            if (data.error) {
+                // Ak je chyba z dôvodu preťaženia (High demand / 429), skúsiť znova
+                if (data.error.code === 429 || (data.error.message && data.error.message.includes("high demand"))) {
+                    attempt++;
+                    continue;
+                }
+                alert("Chyba API: " + data.error.message);
+                document.getElementById("loadingArea").style.display = "none";
+                return;
+            }
+
+            let rawText = data.candidates[0].content.parts[0].text;
+            rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+            clubsData = JSON.parse(rawText);
+
+            success = true;
             document.getElementById("loadingArea").style.display = "none";
-            return;
+            renderClubsReview();
+
+        } catch(e) {
+            attempt++;
+            if (attempt > maxRetries) {
+                document.getElementById("loadingArea").style.display = "none";
+                alert("Chyba pri odpovedi AI: " + e.message + "\nSkús to znova o pár sekúnd.");
+            }
         }
-
-        let rawText = data.candidates[0].content.parts[0].text;
-        rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-        clubsData = JSON.parse(rawText);
-
-        document.getElementById("loadingArea").style.display = "none";
-        renderClubsReview();
-    } catch(e) {
-        document.getElementById("loadingArea").style.display = "none";
-        alert("Chyba pri odpovedi AI: " + e.message + "\nSkontroluj správnosť kľúča v nastaveniach.");
     }
 }
 
@@ -311,7 +338,6 @@ function renderClubsReview() {
 function startSimulation() {
     leagueActive = true;
     
-    // Zablokovanie tlačidiel pre úpravu / návrat
     const resetBtn = document.getElementById("resetBtn");
     resetBtn.disabled = true;
     resetBtn.innerText = "🔒 Liga spustená";
