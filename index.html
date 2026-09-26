@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="sk" data-theme="dark">
 <head>
@@ -76,6 +75,9 @@
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 999; }
         .modal-body { background: var(--card); border: 1px solid var(--accent); border-radius: 14px; max-width: 700px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 25px; }
 
+        .stat-row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 14px; border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
+        .stat-val { font-weight: 700; color: var(--accent); }
+
         .loader { border: 4px solid var(--border); border-top: 4px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -94,7 +96,7 @@
     <!-- KROK 1: VSTUP -->
     <div id="step-setup" class="setup-card">
         <h2>🚀 Nastavenie Novej Súťaže</h2>
-        <p style="color:var(--muted);">Zadaj kluby. Uisti sa, že máš správne vložený Gemini API kľúč!</p>
+        <p style="color:var(--muted);">Zadaj kluby. AI vyhľadá pre každý klub 18 reálnych hráčov!</p>
         
         <div style="margin-bottom: 15px;">
             <label>Počet Klubov:</label>
@@ -104,7 +106,7 @@
         <div id="teamsInputArea" class="grid-2"></div>
 
         <button class="btn" style="margin-top:20px; width:100%; justify-content:center; font-size:16px;" onclick="fetchClubsData()">
-            🔍 Analyzovať & Načítať Reálne Kádre Cez AI
+            🔍 Analyzovať & Načítať Reálne Kádre Cez AI (18 Hráčov)
         </button>
 
         <div id="loadingArea" style="display:none; text-align:center; margin-top:20px;">
@@ -126,7 +128,7 @@
     <div id="step-dashboard" style="display:none;">
         <div class="main-tabs">
             <div class="tab-btn active" onclick="switchTab('tab-table')">🏆 Tabuľka Ligy</div>
-            <div class="tab-btn" onclick="switchTab('tab-matches')">📅 Zápasy & Kurzy</div>
+            <div class="tab-btn" onclick="switchTab('tab-matches')">📅 Zápasy & Detaily</div>
             <div class="tab-btn" onclick="switchTab('tab-scorers')">⚽ Strelci</div>
             <div class="tab-btn" onclick="switchTab('tab-stats')">📈 Pokročilé Štatistiky</div>
         </div>
@@ -233,8 +235,8 @@ async function fetchClubsData() {
 
     document.getElementById("loadingArea").style.display = "block";
 
-    const promptText = `Si futbalová databáza. Vráť IBA čistý JSON bez prídavného textu alebo markdown značiek pre futbalové kluby: ${JSON.stringify(rawNames)}.
- pre každý klub uveď REÁLNE MENÁ súčasných hráčov (aspoň 8 hlavných hviezd/hráčov), reálny štadión, reálnu kapacitu a odhadovaný rozpočet.
+    const promptText = `Si futbalová databáza. Vráť IBA čistý JSON bez prídavného textu pre futbalové kluby: ${JSON.stringify(rawNames)}.
+Pre každý klub uveď REÁLNE MENÁ súčasných hráčov (PRESNE 18 HRÁČOV v kádri - brankári, obrancovia, záložníci, útočníci), reálny štadión, reálnu kapacitu a odhadovaný rozpočet.
 Presný tvar JSON:
 [
   {
@@ -244,12 +246,12 @@ Presný tvar JSON:
     "capacity": 35000,
     "rating": 82,
     "homeAdvantage": 85,
-    "squad": ["Reálne Meno Hráča 1", "Reálne Meno Hráča 2", "Reálne Meno Hráča 3", "Reálne Meno Hráča 4", "Reálne Meno Hráča 5", "Reálne Meno Hráča 6", "Reálne Meno Hráča 7", "Reálne Meno Hráča 8"]
+    "squad": ["Meno 1", "Meno 2", "Meno 3", "Meno 4", "Meno 5", "Meno 6", "Meno 7", "Meno 8", "Meno 9", "Meno 10", "Meno 11", "Meno 12", "Meno 13", "Meno 14", "Meno 15", "Meno 16", "Meno 17", "Meno 18"]
   }
 ]`;
 
     try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -289,8 +291,8 @@ function renderClubsReview() {
             <div class="club-card">
                 <h3><input type="text" value="${club.name}" onchange="clubsData[${index}].name=this.value"> <span class="stat-badge">Rating: ${club.rating}</span></h3>
                 <p style="font-size:12px; color:var(--muted);"><b>Rozpočet:</b> ${club.budget} | <b>Štadión:</b> ${club.stadium}</p>
-                <h4>👥 Súpiska:</h4>
-                <textarea rows="4" onchange="clubsData[${index}].squad=this.value.split(',').map(s=>s.trim())">${club.squad.join(", ")}</textarea>
+                <h4>👥 Káder (${club.squad.length} hráčov):</h4>
+                <textarea rows="6" onchange="clubsData[${index}].squad=this.value.split(',').map(s=>s.trim())">${club.squad.join(", ")}</textarea>
             </div>
         `;
     });
@@ -324,8 +326,13 @@ function startSimulation() {
                 const homeGoals = Math.max(0, Math.floor(parseFloat(homeXg) + (Math.random() > 0.4 ? 0 : 1)));
                 const awayGoals = Math.max(0, Math.floor(parseFloat(awayXg) + (Math.random() > 0.5 ? 0 : 1)));
 
-                const homeShots = homeGoals + Math.floor(Math.random()*8) + 2;
-                const awayShots = awayGoals + Math.floor(Math.random()*6) + 1;
+                // Generovanie striel a držania lopty
+                const homeShots = homeGoals + Math.floor(Math.random()*10) + 3;
+                const awayShots = awayGoals + Math.floor(Math.random()*8) + 2;
+                
+                let homePossession = Math.min(75, Math.max(25, Math.round(50 + diff*1.5 + (Math.random()*10 - 5))));
+                let awayPossession = 100 - homePossession;
+
                 const attendance = Math.round(home.capacity * (0.65 + Math.random()*0.32));
 
                 const hScorers = generateScorers(home, homeGoals);
@@ -335,6 +342,7 @@ function startSimulation() {
                     home: home.name, away: away.name,
                     homeGoals, awayGoals, homeXg, awayXg, odds1, odds2,
                     homeShots, awayShots,
+                    homePossession, awayPossession,
                     homeSaves: Math.max(0, awayShots - awayGoals), awaySaves: Math.max(0, homeShots - homeGoals),
                     attendance, hScorers, aScorers
                 };
@@ -402,7 +410,7 @@ function renderDashboard() {
                 <div style="text-align:left;"><b>${m.home}</b><br><span class="odds-tag">Kurz: ${m.odds1}</span></div>
                 <div>
                     <span style="font-size:18px; font-weight:800; color:var(--accent);">${m.homeGoals} : ${m.awayGoals}</span><br>
-                    <small style="color:var(--muted);">xG ${m.homeXg} - ${m.awayXg}</small>
+                    <small style="color:var(--muted);">Strely: ${m.homeShots} - ${m.awayShots}</small>
                 </div>
                 <div style="text-align:right;"><b>${m.away}</b><br><span class="odds-tag">Kurz: ${m.odds2}</span></div>
             </div>
@@ -417,18 +425,42 @@ function renderDashboard() {
 
     document.getElementById("statsAttendance").innerHTML = sorted.map(t => `<li><b>${t.name}</b>: Priemer ${Math.round(t.attendanceSum / (t.z/2)).toLocaleString()} divákov</li>`).join('');
     document.getElementById("statsXg").innerHTML = [...sorted].sort((a,b)=>b.xG-a.xG).map(t => `<li><b>${t.name}</b>: xG ${t.xG.toFixed(2)}</li>`).join('');
-    document.getElementById("statsGoalkeepers").innerHTML = [...sorted].sort((a,b)=>b.saves-a.saves).map(t => `<li><b>${t.name}</b>: ${t.saves} zákrokov</li>`).join('');
+    document.getElementById("statsGoalkeepers").innerHTML = [...sorted].sort((a,b)=>b.saves-a.saves).map(t => `<li><b>${t.name}</b>: ${t.saves} zákazov</li>`).join('');
 }
 
 function openMatchModal(idx) {
     const m = matchesData[idx];
     document.getElementById("matchModalContent").innerHTML = `
-        <h2 style="text-align:center; color:var(--accent);">${m.home} ${m.homeGoals} : ${m.awayGoals} ${m.away}</h2>
-        <p style="text-align:center; color:var(--muted);">xG: ${m.homeXg} - ${m.awayXg} | Diváci: ${m.attendance.toLocaleString()}</p>
+        <h2 style="text-align:center; color:var(--accent); margin-bottom:5px;">${m.home} ${m.homeGoals} : ${m.awayGoals} ${m.away}</h2>
+        <p style="text-align:center; color:var(--muted); font-size:13px; margin-top:0;">🏟️ Diváci: <b>${m.attendance.toLocaleString()}</b></p>
+        
+        <div style="margin:20px 0;">
+            <div class="stat-row">
+                <span class="stat-val">${m.homePossession}%</span>
+                <span>Držanie Lopty</span>
+                <span class="stat-val">${m.awayPossession}%</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-val">${m.homeShots}</span>
+                <span>Celkové Strely</span>
+                <span class="stat-val">${m.awayShots}</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-val">${m.homeXg}</span>
+                <span>Očakávané Góly (xG)</span>
+                <span class="stat-val">${m.awayXg}</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-val">${m.homeSaves}</span>
+                <span>Zákroky Brankára</span>
+                <span class="stat-val">${m.awaySaves}</span>
+            </div>
+        </div>
+
         <hr style="border-color:var(--border);">
-        <h4>⚽ Góly:</h4>
-        <p><b>Domáci:</b> ${m.hScorers.join(', ') || 'Bez gólov'}</p>
-        <p><b>Hostia:</b> ${m.aScorers.join(', ') || 'Bez gólov'}</p>
+        <h4>⚽ Góly a Strelci:</h4>
+        <p><b>${m.home}:</b> ${m.hScorers.join(', ') || 'Bez gólov'}</p>
+        <p><b>${m.away}:</b> ${m.aScorers.join(', ') || 'Bez gólov'}</p>
         <button class="btn" style="width:100%; margin-top:20px; justify-content:center;" onclick="document.getElementById('matchModal').style.display='none'">Zatvoriť</button>
     `;
     document.getElementById("matchModal").style.display = "flex";
@@ -441,8 +473,8 @@ function openClubModal(name) {
         <h2 style="color:var(--accent);">${club.name}</h2>
         <p><b>Rozpočet:</b> ${club.budget}</p>
         <p><b>Štadión:</b> ${club.stadium}</p>
-        <h4>👥 Káder:</h4>
-        <ul>${club.squad.map(p => `<li>${p}</li>`).join('')}</ul>
+        <h4>👥 Káder (${club.squad.length} Hráčov):</h4>
+        <ol style="padding-left:20px;">${club.squad.map(p => `<li style="margin-bottom:4px;">${p}</li>`).join('')}</ol>
         <button class="btn" style="width:100%; margin-top:20px; justify-content:center;" onclick="document.getElementById('clubModal').style.display='none'">Zatvoriť</button>
     `;
     document.getElementById("clubModal").style.display = "flex";
